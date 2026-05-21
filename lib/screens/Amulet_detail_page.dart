@@ -2,11 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import 'scanner_page.dart'; // AmuletPrediction
-import '../utils/api_service.dart'; // AmuletAnalysis, ApiService
+import 'scanner_page.dart';
+import '../utils/api_service.dart';
 import '../utils/scan_history_service.dart';
 import '../utils/market_price_service.dart';
 import '../utils/auth_service.dart';
+import '../data/amulet_data.dart';
 
 class AmuletDetailPage extends StatefulWidget {
   final AmuletPrediction prediction;
@@ -90,6 +91,7 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
     final pred = widget.prediction;
     final others = widget.allPredictions.skip(1).take(3).toList();
     final marketPrice = MarketPriceService.getPrice(pred.className);
+    final info = amuletDatabase[pred.className.toLowerCase()]; // ← lowercase เสมอ
 
     return Scaffold(
       backgroundColor: _dark,
@@ -110,27 +112,35 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.white10, width: 0.5),
                       ),
-                      child: const Icon(Icons.arrow_back_ios_new, color: _gold, size: 16),
+                      child: const Icon(Icons.arrow_back_ios_new,
+                          color: _gold, size: 16),
                     ),
                   ),
                   const SizedBox(width: 12),
                   const Text('ผลการสแกน',
-                      style: TextStyle(color: _gold, fontSize: 16,
-                          fontWeight: FontWeight.w600, letterSpacing: 1)),
+                      style: TextStyle(
+                          color: _gold,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1)),
                   const Spacer(),
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: _gold.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _gold.withOpacity(0.3), width: 0.5),
+                        border:
+                            Border.all(color: _gold.withOpacity(0.3), width: 0.5),
                       ),
                       child: const Row(children: [
-                        Icon(Icons.document_scanner_outlined, color: _gold, size: 13),
+                        Icon(Icons.document_scanner_outlined,
+                            color: _gold, size: 13),
                         SizedBox(width: 5),
-                        Text('สแกนใหม่', style: TextStyle(color: _gold, fontSize: 11)),
+                        Text('สแกนใหม่',
+                            style: TextStyle(color: _gold, fontSize: 11)),
                       ]),
                     ),
                   ),
@@ -144,7 +154,7 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Captured image
+                    // ── ภาพที่ถ่ายได้ ──────────────────────────────────────
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Stack(
@@ -156,7 +166,8 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                             fit: BoxFit.cover,
                           ),
                           Positioned(
-                            top: 12, right: 12,
+                            top: 12,
+                            right: 12,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 6),
@@ -182,40 +193,84 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Name card
+                    // ── Name card ──────────────────────────────────────────
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: _dark3,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: _gold.withOpacity(0.2), width: 0.5),
+                        border: Border.all(
+                            color: _gold.withOpacity(0.2), width: 0.5),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(pred.emoji, style: const TextStyle(fontSize: 42)),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(pred.thaiName,
-                                    style: const TextStyle(
-                                        color: _gold, fontSize: 22,
-                                        fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 2),
-                                Text(pred.className,
-                                    style: const TextStyle(
-                                        color: _textMuted, fontSize: 12)),
-                              ],
-                            ),
+                          // รูปพระจาก database — fallback เป็น emoji ถ้าไม่มีไฟล์
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: info != null
+                                ? Image.asset(
+                                    info.image,
+                                    height: 220,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => _emojiFallback(
+                                        pred.emoji, height: 220),
+                                  )
+                                : _emojiFallback(pred.emoji, height: 220),
                           ),
+                          const SizedBox(height: 16),
+
+                          // ชื่อพระ
+                          Row(
+                            children: [
+                              Text(pred.emoji,
+                                  style: const TextStyle(fontSize: 42)),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      info?.name ?? pred.thaiName,
+                                      style: const TextStyle(
+                                          color: _gold,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      info?.year ?? '',
+                                      style: const TextStyle(
+                                          color: _textMuted, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          if (info != null) ...[
+                            const SizedBox(height: 16),
+                            _sectionTitle('รายละเอียด'),
+                            const SizedBox(height: 8),
+                            _bodyText(info.description),
+                            const SizedBox(height: 14),
+                            _sectionTitle('พุทธคุณ'),
+                            const SizedBox(height: 8),
+                            _bodyText(info.blessing),
+                            const SizedBox(height: 14),
+                            _sectionTitle('คาถาบูชา'),
+                            const SizedBox(height: 8),
+                            _bodyText(info.chant, lineHeight: 1.8),
+                          ],
                         ],
                       ),
                     ),
                     const SizedBox(height: 10),
 
-                    // Market Price card
+                    // ── ราคาตลาด ──────────────────────────────────────────
                     if (marketPrice != null)
                       Container(
                         width: double.infinity,
@@ -234,7 +289,9 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                                   color: _gold, size: 13),
                               SizedBox(width: 6),
                               Text('ราคาตลาด',
-                                  style: TextStyle(color: _gold, fontSize: 12,
+                                  style: TextStyle(
+                                      color: _gold,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w500)),
                             ]),
                             const SizedBox(height: 10),
@@ -245,8 +302,8 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                                     const Color(0xFF2ECC71)),
                                 _priceBox('ราคาสูงสุด', marketPrice.maxText,
                                     const Color(0xFFF39C12)),
-                                _priceBox('ช่วงราคา', marketPrice.rangeText,
-                                    _textMuted),
+                                _priceBox(
+                                    'ช่วงราคา', marketPrice.rangeText, _textMuted),
                               ],
                             ),
                           ],
@@ -254,7 +311,7 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                       ),
                     const SizedBox(height: 10),
 
-                    // Confidence bar
+                    // ── Confidence bar ─────────────────────────────────────
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -267,7 +324,8 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('ความมั่นใจในการระบุ',
-                                style: TextStyle(color: _textMuted, fontSize: 12)),
+                                style: TextStyle(
+                                    color: _textMuted, fontSize: 12)),
                             Text(_confidenceLabel(pred.confidence),
                                 style: TextStyle(
                                     color: _confidenceColor(pred.confidence),
@@ -289,7 +347,7 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                     ),
                     const SizedBox(height: 10),
 
-                    // AI Analysis
+                    // ── AI Analysis ────────────────────────────────────────
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(14),
@@ -303,18 +361,20 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
                           : _analysisError != null
                               ? Text('ไม่สามารถโหลดข้อมูลเพิ่มเติมได้',
                                   style: TextStyle(
-                                      color: Colors.redAccent.withOpacity(0.7),
+                                      color:
+                                          Colors.redAccent.withOpacity(0.7),
                                       fontSize: 12))
                               : _analysis != null
                                   ? _AnalysisContent(analysis: _analysis!)
                                   : const SizedBox(),
                     ),
 
-                    // Other candidates
+                    // ── ผลลัพธ์อื่น ๆ ─────────────────────────────────────
                     if (others.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       const Text('ผลลัพธ์อื่น ๆ',
-                          style: TextStyle(color: _textMuted, fontSize: 12)),
+                          style:
+                              TextStyle(color: _textMuted, fontSize: 12)),
                       const SizedBox(height: 8),
                       ...others.map((p) => _CandidateRow(
                             prediction: p,
@@ -331,6 +391,31 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
     );
   }
 
+  // ── Helper widgets ─────────────────────────────────────────────────────────
+
+  Widget _emojiFallback(String emoji, {double height = 220}) {
+    return Container(
+      height: height,
+      width: double.infinity,
+      color: const Color(0xFF111111),
+      child: Center(
+        child: Text(emoji, style: const TextStyle(fontSize: 60)),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Text(text,
+        style: const TextStyle(
+            color: _gold, fontSize: 14, fontWeight: FontWeight.bold));
+  }
+
+  Widget _bodyText(String text, {double lineHeight = 1.6}) {
+    return Text(text,
+        style: TextStyle(
+            color: Colors.white70, fontSize: 13, height: lineHeight));
+  }
+
   Widget _priceBox(String label, String value, Color color) {
     return Expanded(
       child: Column(
@@ -341,7 +426,9 @@ class _AmuletDetailPageState extends State<AmuletDetailPage> {
           Text(value,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -358,7 +445,9 @@ class _LoadingAnalysis extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      SizedBox(width: 14, height: 14,
+      SizedBox(
+          width: 14,
+          height: 14,
           child: CircularProgressIndicator(
               strokeWidth: 1.5, color: _gold.withOpacity(0.6))),
       const SizedBox(width: 10),
@@ -383,12 +472,16 @@ class _AnalysisContent extends StatelessWidget {
           Icon(Icons.auto_awesome, color: _gold, size: 13),
           SizedBox(width: 6),
           Text('ข้อมูลจาก AI',
-              style: TextStyle(color: _gold, fontSize: 12,
+              style: TextStyle(
+                  color: _gold,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500)),
         ]),
         const SizedBox(height: 10),
-        if (analysis.generation.isNotEmpty) _row('ยุคสมัย', analysis.generation),
-        if (analysis.priceRange.isNotEmpty) _row('ราคาอ้างอิง', analysis.priceRange),
+        if (analysis.generation.isNotEmpty)
+          _row('ยุคสมัย', analysis.generation),
+        if (analysis.priceRange.isNotEmpty)
+          _row('ราคาอ้างอิง', analysis.priceRange),
         if (analysis.authenticPercent > 0)
           _row('ประเมินความแท้',
               '${analysis.authenticPercent.toStringAsFixed(0)}%'),
@@ -412,11 +505,14 @@ class _AnalysisContent extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 100,
+        SizedBox(
+            width: 100,
             child: Text(label,
                 style: const TextStyle(color: _textMuted, fontSize: 11))),
-        Expanded(child: Text(value,
-            style: const TextStyle(color: Colors.white70, fontSize: 11))),
+        Expanded(
+            child: Text(value,
+                style:
+                    const TextStyle(color: Colors.white70, fontSize: 11))),
       ]),
     );
   }
@@ -425,7 +521,8 @@ class _AnalysisContent extends StatelessWidget {
 class _CandidateRow extends StatelessWidget {
   final AmuletPrediction prediction;
   final Color confidenceColor;
-  const _CandidateRow({required this.prediction, required this.confidenceColor});
+  const _CandidateRow(
+      {required this.prediction, required this.confidenceColor});
   static const _dark3 = Color(0xFF1E1E1E);
 
   @override
@@ -435,14 +532,17 @@ class _CandidateRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: _dark3, borderRadius: BorderRadius.circular(10),
+          color: _dark3,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.white10, width: 0.5),
         ),
         child: Row(children: [
           Text(prediction.emoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 10),
-          Expanded(child: Text(prediction.thaiName,
-              style: const TextStyle(color: Colors.white70, fontSize: 13))),
+          Expanded(
+              child: Text(prediction.thaiName,
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 13))),
           Text('${(prediction.confidence * 100).toStringAsFixed(1)}%',
               style: TextStyle(color: confidenceColor, fontSize: 12)),
         ]),

@@ -31,31 +31,49 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) setState(() { _profile = p; _loading = false; });
   }
 
-  Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('ออกจากระบบ',
-            style: TextStyle(color: Colors.white, fontSize: 16)),
-        content: const Text('ต้องการออกจากระบบใช่หรือไม่?',
-            style: TextStyle(color: Colors.white70, fontSize: 13)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false),
-              child: const Text('ยกเลิก', style: TextStyle(color: Colors.white38))),
-          TextButton(onPressed: () => Navigator.pop(context, true),
-              child: const Text('ออกจากระบบ',
-                  style: TextStyle(color: Colors.redAccent))),
-        ],
+Future<void> _logout() async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      title: const Text(
+        'ออกจากระบบ',
+        style: TextStyle(color: Colors.white, fontSize: 16),
       ),
-    );
+      content: const Text(
+        'ต้องการออกจากระบบใช่หรือไม่?',
+        style: TextStyle(color: Colors.white70, fontSize: 13),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text(
+            'ยกเลิก',
+            style: TextStyle(color: Colors.white38),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            'ออกจากระบบ',
+            style: TextStyle(color: Colors.redAccent),
+          ),
+        ),
+      ],
+    ),
+  );
 
-    if (confirm != true) return;
-    await AuthService.logout();
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context, MaterialPageRoute(builder: (_) => const LoginPage()));
-  }
+  if (confirm != true) return;
+
+  await AuthService.logout();
+
+  if (!mounted) return;
+
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const LoginPage()),
+    (route) => false,
+  );
+}
 
   @override
   Widget build(BuildContext context) {

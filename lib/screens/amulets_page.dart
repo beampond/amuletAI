@@ -4,21 +4,19 @@ class AmuletData {
   final String emoji;
   final String thaiName;
   final String englishName;
+  final String assetName;
 
-  const AmuletData(this.emoji, this.thaiName, this.englishName);
+  const AmuletData(this.emoji, this.thaiName, this.englishName, this.assetName);
 }
 
 const _amulets = [
-  AmuletData('🪬', 'พระสมเด็จ', 'Somdej'),
-  AmuletData('🔮', 'หลวงปู่ทวด', 'Luang Pu Thuat'),
-  AmuletData('✨', 'หลวงพ่อโสธร', 'Luang Pho Sothorn'),
-  AmuletData('🙏', 'หลวงพ่อคูณ', 'Luang Pho Khun'),
-  AmuletData('💫', 'หลวงพ่อรวย', 'Luang Pho Ruay'),
-  AmuletData('🧿', 'พระปิดตา', 'Phra Pidta'),
-  AmuletData('⭐', 'พระปานพิมพ์ครุฑ', 'Phra Phan Khrut'),
-  AmuletData('🌟', 'พระขุนแผน', 'Phra Khun Pan'),
-  AmuletData('🏆', 'พระนางพญา', 'Phra Nang Phaya'),
-  AmuletData('🌺', 'หลวงพ่อเงิน', 'Luang Pho Ngern'),
+  AmuletData('🪬', 'พระสมเด็จ',    'Somdej',            'somdej.jpg'),
+  AmuletData('🔮', 'หลวงปู่ทวด',   'Luang Pu Thuat',    'luang_pu_thuat.jpg'),
+  AmuletData('✨', 'หลวงพ่อโสธร',  'Luang Pho Sothorn', 'luang_pho_sothorn.jpg'),
+  AmuletData('🙏', 'หลวงพ่อคูณ',   'Luang Pho Khun',    'luang_pho_khun.jpg'),
+  AmuletData('💫', 'หลวงพ่อรวย',   'Luang Pho Ruay',    'luang_pho_ruay.jpg'),
+  AmuletData('🧿', 'พระปิดตา',     'Phra Pidta',        'phra_pidta.jpg'),
+  AmuletData('🌟', 'พระขุนแผน',    'Phra Khun Pan',     'phra_khun_pan.jpg'),
 ];
 
 class AmuletsPage extends StatefulWidget {
@@ -34,8 +32,6 @@ class _AmuletsPageState extends State<AmuletsPage> {
 
   static const _gold = Color(0xFFC9A84C);
   static const _dark = Color(0xFF0D0D0D);
-  static const _dark3 = Color(0xFF1E1E1E);
-  static const _text2 = Color(0xFFA89878);
 
   @override
   void dispose() {
@@ -85,8 +81,10 @@ class _AmuletsPageState extends State<AmuletsPage> {
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: const InputDecoration(
                     hintText: 'ค้นหาพระ...',
-                    hintStyle: TextStyle(color: Color(0xFF555555), fontSize: 13),
-                    prefixIcon: Icon(Icons.search, color: Color(0xFF555555), size: 18),
+                    hintStyle:
+                        TextStyle(color: Color(0xFF555555), fontSize: 13),
+                    prefixIcon:
+                        Icon(Icons.search, color: Color(0xFF555555), size: 18),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(vertical: 11),
                   ),
@@ -96,7 +94,8 @@ class _AmuletsPageState extends State<AmuletsPage> {
             Expanded(
               child: GridView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
@@ -131,14 +130,21 @@ class _AmuletCard extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF111111),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
-                border: Border(bottom: BorderSide(color: Color(0xFF222222), width: 0.5)),
-              ),
-              child: Center(
-                child: Text(amulet.emoji, style: const TextStyle(fontSize: 40)),
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(14)),
+              child: Image.asset(
+                'assets/amulets/${amulet.assetName}',
+                width: double.infinity,
+                height: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: const Color(0xFF111111),
+                  child: Center(
+                    child: Text(amulet.emoji,
+                        style: const TextStyle(fontSize: 40)),
+                  ),
+                ),
               ),
             ),
           ),
@@ -149,7 +155,9 @@ class _AmuletCard extends StatelessWidget {
               children: [
                 Text(amulet.thaiName,
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
@@ -157,14 +165,17 @@ class _AmuletCard extends StatelessWidget {
                     style: const TextStyle(color: _text2, fontSize: 10)),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A2A1A),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF2A3A2A), width: 0.5),
+                    border: Border.all(
+                        color: const Color(0xFF2A3A2A), width: 0.5),
                   ),
                   child: const Text('สแกนได้',
-                      style: TextStyle(color: Color(0xFF2ECC71), fontSize: 9)),
+                      style:
+                          TextStyle(color: Color(0xFF2ECC71), fontSize: 9)),
                 ),
               ],
             ),

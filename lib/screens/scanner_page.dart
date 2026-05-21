@@ -30,7 +30,6 @@ class AmuletPrediction {
 
   String get thaiName {
     const map = {
-      // ชื่อเต็ม
       'somdej': 'พระสมเด็จ',
       'luang_pu_thuat': 'หลวงปู่ทวด',
       'luang_pho_sothorn': 'หลวงพ่อโสธร',
@@ -38,8 +37,6 @@ class AmuletPrediction {
       'luang_pho_ruay': 'หลวงพ่อรวย',
       'phra_pidta': 'พระปิดตา',
       'phra_khun_pan': 'พระขุนแผน',
-      'nang_phaya': 'พระนางพญา',
-      // ชื่อย่อที่ model อาจส่งมา
       'sothorn': 'หลวงพ่อโสธร',
       'khun': 'หลวงพ่อคูณ',
       'ruay': 'หลวงพ่อรวย',
@@ -60,8 +57,6 @@ class AmuletPrediction {
       'luang_pho_ruay': '💫',
       'phra_pidta': '🧿',
       'phra_khun_pan': '🌟',
-      'nang_phaya': '🏆',
-      // ชื่อย่อ
       'sothorn': '✨',
       'khun': '🙏',
       'ruay': '💫',
@@ -77,16 +72,11 @@ class AmuletPrediction {
 // ── Roboflow Service ──────────────────────────────────────────────────────────
 
 class RoboflowService {
-  // ✅ อัปเดต URL เป็น model ใหม่: amulet-detection version 2
-  static const _modelUrl =
-      'https://detect.roboflow.com/amulet-detection/2';
-
+  static const _modelUrl = 'https://detect.roboflow.com/amulet-detection/2';
   static String get _apiKey => dotenv.env['ROBOFLOW_API_KEY'] ?? '';
 
   static Future<List<AmuletPrediction>> detect(String base64Image) async {
-    if (_apiKey.isEmpty) {
-      throw Exception('ROBOFLOW_API_KEY is missing in .env');
-    }
+    if (_apiKey.isEmpty) throw Exception('ROBOFLOW_API_KEY is missing in .env');
 
     final response = await http
         .post(
@@ -97,18 +87,11 @@ class RoboflowService {
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Roboflow error ${response.statusCode}: ${response.body}',
-      );
+      throw Exception('Roboflow error ${response.statusCode}: ${response.body}');
     }
-
-    debugPrint('=== ROBOFLOW RAW ===\n${response.body}\n====================');
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final rawPreds = _extractPredictions(data);
-
-    debugPrint('=== PARSED: ${rawPreds.length} predictions ===');
-
     final preds = rawPreds
         .whereType<Map<String, dynamic>>()
         .map(AmuletPrediction.fromJson)
@@ -118,37 +101,17 @@ class RoboflowService {
   }
 
   static List<dynamic> _extractPredictions(Map<String, dynamic> data) {
-    debugPrint('=== EXTRACT keys: ${data.keys.toList()} ===');
-
     final predsField = data['predictions'];
-
-    // Format A: standard hosted API → predictions is a flat List
-    // {"predictions":[{"class":"phra_pidta","confidence":0.98,...}]}
-    if (predsField is List) {
-      debugPrint('=== Format A: List length=${predsField.length} ===');
-      return predsField;
-    }
-
-    // Format B: workflow / test-UI → predictions is a Map with nested list
-    // {"predictions":{"image":{...},"predictions":[{"class":"phra_pidta",...}]}}
+    if (predsField is List) return predsField;
     if (predsField is Map<String, dynamic>) {
       final nested = predsField['predictions'];
-      if (nested is List) {
-        debugPrint('=== Format B nested List length=${nested.length} ===');
-        return nested;
-      }
-      // classification map: {"somdej": 0.92, ...}
+      if (nested is List) return nested;
       final classMap = predsField.entries
           .where((e) => e.value is num)
           .map((e) => {'class': e.key, 'confidence': (e.value as num).toDouble()})
           .toList();
-      if (classMap.isNotEmpty) {
-        debugPrint('=== Format B-class map length=${classMap.length} ===');
-        return classMap;
-      }
+      if (classMap.isNotEmpty) return classMap;
     }
-
-    // Format C: outputs wrapper
     final outputs = data['outputs'];
     if (outputs is List && outputs.isNotEmpty) {
       final first = outputs.first;
@@ -161,8 +124,6 @@ class RoboflowService {
         }
       }
     }
-
-    debugPrint('=== No predictions found ===');
     return const [];
   }
 }
@@ -173,19 +134,21 @@ class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key});
 
   @override
-  State<ScannerPage> createState() => _ScannerPageState();
+  // public state ให้ MainShell เรียกได้
+  ScannerPageState createState() => ScannerPageState();
 }
 
-class _ScannerPageState extends State<ScannerPage> {
+class ScannerPageState extends State<ScannerPage> {
   html.VideoElement? _videoElement;
   html.MediaStream? _stream;
   bool _cameraReady = false;
   bool _cameraError = false;
   String _cameraErrorMsg = '';
   bool _isScanning = false;
+  bool _isNavigating = false;
+  bool _isPaused = false; // ← หยุดเมื่อออกจาก tab
 
-  // threshold สูงขึ้นเป็น 75% และต้องเจอ class เดิม 2 ครั้งติดกัน (debounce)
-  static const double _detectThreshold = 0.75;
+  static const double _detectThreshold = 0.65;
   static const int _requiredConsecutive = 2;
   String _lastDetectedClass = '';
   int _consecutiveCount = 0;
@@ -199,14 +162,31 @@ class _ScannerPageState extends State<ScannerPage> {
   static const _gold = Color(0xFFC9A84C);
   static const _dark = Color(0xFF0D0D0D);
   static const _dark2 = Color(0xFF161616);
-  static const _dark3 = Color(0xFF1E1E1E);
-  static const _textMuted = Color(0xFFA89878);
 
   @override
   void initState() {
     super.initState();
     _setupCamera();
   }
+
+  // ── Public API สำหรับ MainShell ───────────────────────────────────────────
+
+  void pauseScanning() {
+    _isPaused = true;
+    _stopTimer();
+    debugPrint('Scanner paused');
+  }
+
+  void resumeScanning() {
+    if (!_cameraReady) return;
+    _isPaused = false;
+    _lastDetectedClass = '';
+    _consecutiveCount = 0;
+    _startTimer();
+    debugPrint('Scanner resumed');
+  }
+
+  // ── Camera setup ──────────────────────────────────────────────────────────
 
   Future<void> _setupCamera() async {
     _videoElement = html.VideoElement()
@@ -231,8 +211,10 @@ class _ScannerPageState extends State<ScannerPage> {
       await _videoElement!.play();
       if (mounted) setState(() => _cameraReady = true);
 
-      unawaited(_scanFrame());
-      _timer = Timer.periodic(_scanInterval, (_) => _scanFrame());
+      if (!_isPaused) {
+        unawaited(_scanFrame());
+        _startTimer();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -243,9 +225,19 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
-  // ✅ เมื่อสแกนเจอพระ confidence สูงพอ → หยุด timer → navigate ไป detail page
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(_scanInterval, (_) => _scanFrame());
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
   Future<void> _scanFrame() async {
-    if (_isScanning || _videoElement == null || !_cameraReady) return;
+    if (_isScanning || _isNavigating || _isPaused) return;
+    if (_videoElement == null || !_cameraReady) return;
     if (mounted) setState(() => _isScanning = true);
 
     try {
@@ -259,31 +251,15 @@ class _ScannerPageState extends State<ScannerPage> {
       final captureWidth = (videoWidth * captureScale).round();
       final captureHeight = (videoHeight * captureScale).round();
 
-      final canvas = html.CanvasElement(
-        width: captureWidth,
-        height: captureHeight,
-      );
-      canvas.context2D.drawImageScaled(
-        _videoElement!,
-        0,
-        0,
-        captureWidth,
-        captureHeight,
-      );
+      final canvas = html.CanvasElement(width: captureWidth, height: captureHeight);
+      canvas.context2D.drawImageScaled(_videoElement!, 0, 0, captureWidth, captureHeight);
       final dataUrl = canvas.toDataUrl('image/jpeg', 0.90);
       final base64Image = dataUrl.split(',').last;
 
       final preds = await RoboflowService.detect(base64Image);
 
-      if (!mounted) return;
+      if (!mounted || _isPaused) return;
 
-      // DEBUG: แสดงผลทุก prediction ที่ได้รับ
-      debugPrint('=== ALL PREDICTIONS (${preds.length}) ===');
-      for (final p in preds) {
-        debugPrint('  class: ${p.className}  conf: ${(p.confidence * 100).toStringAsFixed(1)}%');
-      }
-
-      // debounce: ต้องเจอ class เดิมติดกัน _requiredConsecutive ครั้ง จึง navigate
       if (preds.isNotEmpty && preds.first.confidence >= _detectThreshold) {
         final detectedClass = preds.first.className;
         if (detectedClass == _lastDetectedClass) {
@@ -292,7 +268,6 @@ class _ScannerPageState extends State<ScannerPage> {
           _lastDetectedClass = detectedClass;
           _consecutiveCount = 1;
         }
-        debugPrint('Detected: $detectedClass x$_consecutiveCount (conf: ${preds.first.confidence})');
       } else {
         _lastDetectedClass = '';
         _consecutiveCount = 0;
@@ -301,43 +276,31 @@ class _ScannerPageState extends State<ScannerPage> {
       if (_consecutiveCount >= _requiredConsecutive) {
         _consecutiveCount = 0;
         _lastDetectedClass = '';
-        final preds2 = preds; // snapshot
-        _stopScanning();
+        final snapshot = List<AmuletPrediction>.from(preds);
+
+        _stopTimer();
+        _isNavigating = true;
+
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => AmuletDetailPage(
-              prediction: preds2.first,
-              allPredictions: preds2,
+              prediction: snapshot.first,
+              allPredictions: snapshot,
               capturedImageBase64: base64Image,
             ),
           ),
         );
-        // กลับมาจากหน้า detail → เริ่มสแกนใหม่
-        _resumeScanning();
+
+        _isNavigating = false;
+        // กลับมาจาก detail — เริ่มใหม่เฉพาะเมื่อยัง active tab อยู่
+        if (mounted && !_isPaused) resumeScanning();
       }
     } catch (e) {
       debugPrint('Scan error: $e');
     } finally {
       if (mounted) setState(() => _isScanning = false);
     }
-  }
-
-  void _stopScanning() {
-    _timer?.cancel();
-    _timer = null;
-  }
-
-  void _resumeScanning() {
-    if (!mounted) return;
-    _timer = Timer.periodic(_scanInterval, (_) => _scanFrame());
-    unawaited(_scanFrame());
-  }
-
-  Color _confidenceColor(double c) {
-    if (c >= 0.70) return const Color(0xFF2ECC71);
-    if (c >= 0.45) return const Color(0xFFF39C12);
-    return const Color(0xFFE74C3C);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -353,16 +316,14 @@ class _ScannerPageState extends State<ScannerPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.no_photography,
-                    color: Colors.redAccent, size: 64),
+                const Icon(Icons.no_photography, color: Colors.redAccent, size: 64),
                 const SizedBox(height: 16),
                 const Text('ไม่สามารถเปิดกล้องได้',
                     style: TextStyle(color: Colors.white, fontSize: 16)),
                 const SizedBox(height: 8),
                 Text(_cameraErrorMsg,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 11)),
+                    style: const TextStyle(color: Colors.white38, fontSize: 11)),
               ],
             ),
           ),
@@ -374,7 +335,6 @@ class _ScannerPageState extends State<ScannerPage> {
       backgroundColor: _dark,
       body: Column(
         children: [
-          // ── Camera view ──────────────────────────────────────────────────
           Expanded(
             child: Stack(
               fit: StackFit.expand,
@@ -385,31 +345,23 @@ class _ScannerPageState extends State<ScannerPage> {
                   Container(
                     color: _dark2,
                     child: const Center(
-                      child: CircularProgressIndicator(
-                          color: Color(0xFFC9A84C)),
+                      child: CircularProgressIndicator(color: Color(0xFFC9A84C)),
                     ),
                   ),
 
-                // dim overlay
                 Container(color: Colors.black.withOpacity(0.25)),
 
-                // corner guides
                 _corner(top: 80, left: 40, topLeft: true),
                 _corner(top: 80, right: 40, topRight: true),
                 _corner(bottom: 80, left: 40, bottomLeft: true),
                 _corner(bottom: 80, right: 40, bottomRight: true),
 
-                // scanning line
-                if (_isScanning)
+                if (_isScanning && !_isPaused)
                   Positioned(
-                    top: 0,
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
+                    top: 0, bottom: 0, left: 0, right: 0,
                     child: Center(
                       child: SizedBox(
-                        width: 220,
-                        height: 2,
+                        width: 220, height: 2,
                         child: LinearProgressIndicator(
                           backgroundColor: Colors.transparent,
                           color: _gold,
@@ -419,11 +371,13 @@ class _ScannerPageState extends State<ScannerPage> {
                   ),
 
                 Positioned(
-                  bottom: 12,
-                  left: 0,
-                  right: 0,
+                  bottom: 12, left: 0, right: 0,
                   child: Text(
-                    _isScanning ? 'กำลังวิเคราะห์...' : 'วางพระในกรอบเพื่อสแกน',
+                    _isPaused
+                        ? ''
+                        : _isScanning
+                            ? 'กำลังวิเคราะห์...'
+                            : 'วางพระในกรอบเพื่อสแกน',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: _isScanning ? _gold : Colors.white38,
@@ -432,12 +386,12 @@ class _ScannerPageState extends State<ScannerPage> {
                   ),
                 ),
 
-                // Manual scan button
                 Positioned(
-                  bottom: 36,
-                  right: 16,
+                  bottom: 36, right: 16,
                   child: GestureDetector(
-                    onTap: _isScanning ? null : _scanFrame,
+                    onTap: (_isScanning || _isNavigating || _isPaused)
+                        ? null
+                        : _scanFrame,
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -448,7 +402,9 @@ class _ScannerPageState extends State<ScannerPage> {
                       ),
                       child: Icon(
                         Icons.center_focus_strong,
-                        color: _isScanning ? Colors.white24 : _gold,
+                        color: (_isScanning || _isNavigating || _isPaused)
+                            ? Colors.white24
+                            : _gold,
                         size: 22,
                       ),
                     ),
@@ -458,33 +414,29 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
           ),
 
-          // ── Status bar (แทน result panel เดิม) ───────────────────────────
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
             decoration: BoxDecoration(
               color: _dark2,
               border: Border(
-                  top: BorderSide(
-                      color: _gold.withOpacity(0.3), width: 0.5)),
+                  top: BorderSide(color: _gold.withOpacity(0.3), width: 0.5)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  _isScanning
-                      ? Icons.radar
-                      : Icons.document_scanner_outlined,
-                  color: _isScanning ? _gold : Colors.white38,
+                  _isScanning ? Icons.radar : Icons.document_scanner_outlined,
+                  color: _isScanning && !_isPaused ? _gold : Colors.white38,
                   size: 16,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _isScanning
+                  _isScanning && !_isPaused
                       ? 'กำลังสแกน...'
                       : 'พร้อมสแกน — วางพระให้เห็นชัดเจน',
                   style: TextStyle(
-                    color: _isScanning ? _gold : Colors.white38,
+                    color: _isScanning && !_isPaused ? _gold : Colors.white38,
                     fontSize: 12,
                   ),
                 ),
@@ -497,23 +449,14 @@ class _ScannerPageState extends State<ScannerPage> {
   }
 
   Widget _corner({
-    double? top,
-    double? bottom,
-    double? left,
-    double? right,
-    bool topLeft = false,
-    bool topRight = false,
-    bool bottomLeft = false,
-    bool bottomRight = false,
+    double? top, double? bottom, double? left, double? right,
+    bool topLeft = false, bool topRight = false,
+    bool bottomLeft = false, bool bottomRight = false,
   }) {
     return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
+      top: top, bottom: bottom, left: left, right: right,
       child: Container(
-        width: 24,
-        height: 24,
+        width: 24, height: 24,
         decoration: BoxDecoration(
           border: Border(
             top: topLeft || topRight
@@ -536,7 +479,7 @@ class _ScannerPageState extends State<ScannerPage> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _stopTimer();
     _stream?.getTracks().forEach((t) => t.stop());
     super.dispose();
   }

@@ -29,6 +29,13 @@
             {
               "client_id": "123403823832-6ev5c3sa4uh3hfv26j5ufsppr0791q5s.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "123403823832-t1622f5c9g9vuajmnrd47ggjqm5qbbeq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.amuletScanner"
+              }
             }
           ]
         }
