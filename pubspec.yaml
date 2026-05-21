@@ -12,6 +12,11 @@ dependencies:
   camera: ^0.10.5+9
   http: ^1.2.0
   flutter_dotenv: ^5.1.0
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
+  cloud_firestore: ^6.3.0
+  google_sign_in: ^6.2.2
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

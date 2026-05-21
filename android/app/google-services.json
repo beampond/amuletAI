@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "123403823832",
+    "project_id": "backendamulet",
+    "storage_bucket": "backendamulet.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123403823832:android:bd40c44bb70986335f05ad",
+        "android_client_info": {
+          "package_name": "com.example.amulet_scanner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "123403823832-6ev5c3sa4uh3hfv26j5ufsppr0791q5s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuxeonzbCmDCV693T5hcI29RwRH0In-sk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "123403823832-6ev5c3sa4uh3hfv26j5ufsppr0791q5s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

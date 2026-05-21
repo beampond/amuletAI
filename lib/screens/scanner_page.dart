@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
+import 'Amulet_detail_page.dart';
+
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 class AmuletPrediction {
@@ -28,6 +30,7 @@ class AmuletPrediction {
 
   String get thaiName {
     const map = {
+      // ชื่อเต็ม
       'somdej': 'พระสมเด็จ',
       'luang_pu_thuat': 'หลวงปู่ทวด',
       'luang_pho_sothorn': 'หลวงพ่อโสธร',
@@ -36,15 +39,47 @@ class AmuletPrediction {
       'phra_pidta': 'พระปิดตา',
       'phra_khun_pan': 'พระขุนแผน',
       'nang_phaya': 'พระนางพญา',
+      // ชื่อย่อที่ model อาจส่งมา
+      'sothorn': 'หลวงพ่อโสธร',
+      'khun': 'หลวงพ่อคูณ',
+      'ruay': 'หลวงพ่อรวย',
+      'pidta': 'พระปิดตา',
+      'khun_pan': 'พระขุนแผน',
+      'thuat': 'หลวงปู่ทวด',
+      'phra_somdej': 'พระสมเด็จ',
     };
     return map[className.toLowerCase()] ?? className;
+  }
+
+  String get emoji {
+    const map = {
+      'somdej': '🪬',
+      'luang_pu_thuat': '🔮',
+      'luang_pho_sothorn': '✨',
+      'luang_pho_khun': '🙏',
+      'luang_pho_ruay': '💫',
+      'phra_pidta': '🧿',
+      'phra_khun_pan': '🌟',
+      'nang_phaya': '🏆',
+      // ชื่อย่อ
+      'sothorn': '✨',
+      'khun': '🙏',
+      'ruay': '💫',
+      'pidta': '🧿',
+      'khun_pan': '🌟',
+      'thuat': '🔮',
+      'phra_somdej': '🪬',
+    };
+    return map[className.toLowerCase()] ?? '🪬';
   }
 }
 
 // ── Roboflow Service ──────────────────────────────────────────────────────────
 
 class RoboflowService {
-  static const _modelUrl = 'https://classify.roboflow.com/gg-nrhrh/2';
+  // ✅ อัปเดต URL เป็น model ใหม่: amulet-detection version 2
+  static const _modelUrl =
+      'https://detect.roboflow.com/amulet-detection/2';
 
   static String get _apiKey => dotenv.env['ROBOFLOW_API_KEY'] ?? '';
 
@@ -67,7 +102,6 @@ class RoboflowService {
       );
     }
 
-    // DEBUG — ดูใน Chrome DevTools Console
     debugPrint('=== ROBOFLOW RAW ===\n${response.body}\n====================');
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -84,29 +118,51 @@ class RoboflowService {
   }
 
   static List<dynamic> _extractPredictions(Map<String, dynamic> data) {
-    final top = data['predictions'];
-    if (top is List) return top;
-    if (top is Map<String, dynamic>) {
-      final nested = top['predictions'];
-      if (nested is List) return nested;
+    debugPrint('=== EXTRACT keys: ${data.keys.toList()} ===');
+
+    final predsField = data['predictions'];
+
+    // Format A: standard hosted API → predictions is a flat List
+    // {"predictions":[{"class":"phra_pidta","confidence":0.98,...}]}
+    if (predsField is List) {
+      debugPrint('=== Format A: List length=${predsField.length} ===');
+      return predsField;
     }
 
+    // Format B: workflow / test-UI → predictions is a Map with nested list
+    // {"predictions":{"image":{...},"predictions":[{"class":"phra_pidta",...}]}}
+    if (predsField is Map<String, dynamic>) {
+      final nested = predsField['predictions'];
+      if (nested is List) {
+        debugPrint('=== Format B nested List length=${nested.length} ===');
+        return nested;
+      }
+      // classification map: {"somdej": 0.92, ...}
+      final classMap = predsField.entries
+          .where((e) => e.value is num)
+          .map((e) => {'class': e.key, 'confidence': (e.value as num).toDouble()})
+          .toList();
+      if (classMap.isNotEmpty) {
+        debugPrint('=== Format B-class map length=${classMap.length} ===');
+        return classMap;
+      }
+    }
+
+    // Format C: outputs wrapper
     final outputs = data['outputs'];
     if (outputs is List && outputs.isNotEmpty) {
       final first = outputs.first;
       if (first is Map<String, dynamic>) {
-        final output = first['output'];
-        if (output is List) return output;
-
-        final predictions = first['predictions'];
-        if (predictions is List) return predictions;
-        if (predictions is Map<String, dynamic>) {
-          final nested = predictions['predictions'];
-          if (nested is List) return nested;
+        final p = first['predictions'];
+        if (p is List) return p;
+        if (p is Map<String, dynamic>) {
+          final n = p['predictions'];
+          if (n is List) return n;
         }
       }
     }
 
+    debugPrint('=== No predictions found ===');
     return const [];
   }
 }
@@ -128,14 +184,16 @@ class _ScannerPageState extends State<ScannerPage> {
   String _cameraErrorMsg = '';
   bool _isScanning = false;
 
-  List<AmuletPrediction> _predictions = [];
-  bool _hasResult = false;
-  String? _scanError;
+  // threshold สูงขึ้นเป็น 75% และต้องเจอ class เดิม 2 ครั้งติดกัน (debounce)
+  static const double _detectThreshold = 0.75;
+  static const int _requiredConsecutive = 2;
+  String _lastDetectedClass = '';
+  int _consecutiveCount = 0;
 
   Timer? _timer;
 
   final String _viewId = 'webcam-${DateTime.now().millisecondsSinceEpoch}';
-  static const int _captureMaxSide = 416;
+  static const int _captureMaxSide = 640;
   static const Duration _scanInterval = Duration(seconds: 2);
 
   static const _gold = Color(0xFFC9A84C);
@@ -166,7 +224,7 @@ class _ScannerPageState extends State<ScannerPage> {
 
     try {
       _stream = await html.window.navigator.mediaDevices!.getUserMedia({
-        'video': {'facingMode': 'environment', 'width': 480, 'height': 360},
+        'video': {'facingMode': 'environment', 'width': 1280, 'height': 720},
         'audio': false,
       });
       _videoElement!.srcObject = _stream;
@@ -185,6 +243,7 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
+  // ✅ เมื่อสแกนเจอพระ confidence สูงพอ → หยุด timer → navigate ไป detail page
   Future<void> _scanFrame() async {
     if (_isScanning || _videoElement == null || !_cameraReady) return;
     if (mounted) setState(() => _isScanning = true);
@@ -211,24 +270,68 @@ class _ScannerPageState extends State<ScannerPage> {
         captureWidth,
         captureHeight,
       );
-      final dataUrl = canvas.toDataUrl('image/jpeg', 0.70);
+      final dataUrl = canvas.toDataUrl('image/jpeg', 0.90);
       final base64Image = dataUrl.split(',').last;
 
       final preds = await RoboflowService.detect(base64Image);
 
-      if (mounted) {
-        setState(() {
-          _predictions = preds;
-          _hasResult = true;
-          _scanError = null;
-        });
+      if (!mounted) return;
+
+      // DEBUG: แสดงผลทุก prediction ที่ได้รับ
+      debugPrint('=== ALL PREDICTIONS (${preds.length}) ===');
+      for (final p in preds) {
+        debugPrint('  class: ${p.className}  conf: ${(p.confidence * 100).toStringAsFixed(1)}%');
+      }
+
+      // debounce: ต้องเจอ class เดิมติดกัน _requiredConsecutive ครั้ง จึง navigate
+      if (preds.isNotEmpty && preds.first.confidence >= _detectThreshold) {
+        final detectedClass = preds.first.className;
+        if (detectedClass == _lastDetectedClass) {
+          _consecutiveCount++;
+        } else {
+          _lastDetectedClass = detectedClass;
+          _consecutiveCount = 1;
+        }
+        debugPrint('Detected: $detectedClass x$_consecutiveCount (conf: ${preds.first.confidence})');
+      } else {
+        _lastDetectedClass = '';
+        _consecutiveCount = 0;
+      }
+
+      if (_consecutiveCount >= _requiredConsecutive) {
+        _consecutiveCount = 0;
+        _lastDetectedClass = '';
+        final preds2 = preds; // snapshot
+        _stopScanning();
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AmuletDetailPage(
+              prediction: preds2.first,
+              allPredictions: preds2,
+              capturedImageBase64: base64Image,
+            ),
+          ),
+        );
+        // กลับมาจากหน้า detail → เริ่มสแกนใหม่
+        _resumeScanning();
       }
     } catch (e) {
-      if (mounted) setState(() => _scanError = e.toString());
       debugPrint('Scan error: $e');
     } finally {
       if (mounted) setState(() => _isScanning = false);
     }
+  }
+
+  void _stopScanning() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _resumeScanning() {
+    if (!mounted) return;
+    _timer = Timer.periodic(_scanInterval, (_) => _scanFrame());
+    unawaited(_scanFrame());
   }
 
   Color _confidenceColor(double c) {
@@ -253,50 +356,15 @@ class _ScannerPageState extends State<ScannerPage> {
                 const Icon(Icons.no_photography,
                     color: Colors.redAccent, size: 64),
                 const SizedBox(height: 16),
-                const Text('เปิดกล้องไม่ได้',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
+                const Text('ไม่สามารถเปิดกล้องได้',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
                 const SizedBox(height: 8),
                 Text(_cameraErrorMsg,
                     textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(color: Colors.white54, fontSize: 12)),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _cameraError = false;
-                      _cameraReady = false;
-                    });
-                    _setupCamera();
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('ลองใหม่'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _gold,
-                      foregroundColor: Colors.black),
-                ),
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 11)),
               ],
             ),
-          ),
-        ),
-      );
-    }
-
-    if (!_cameraReady) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0D0D0D),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Color(0xFFC9A84C)),
-              SizedBox(height: 16),
-              Text('กำลังเปิดกล้อง...',
-                  style: TextStyle(color: Colors.white54)),
-            ],
           ),
         ),
       );
@@ -306,36 +374,50 @@ class _ScannerPageState extends State<ScannerPage> {
       backgroundColor: _dark,
       body: Column(
         children: [
-          // ── Camera ────────────────────────────────────────────────────────
+          // ── Camera view ──────────────────────────────────────────────────
           Expanded(
-            flex: 5,
             child: Stack(
               fit: StackFit.expand,
               children: [
-                HtmlElementView(viewType: _viewId),
-                Center(
-                  child: SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: Stack(children: [
-                      _corner(top: 0, left: 0, topLeft: true),
-                      _corner(top: 0, right: 0, topRight: true),
-                      _corner(bottom: 0, left: 0, bottomLeft: true),
-                      _corner(bottom: 0, right: 0, bottomRight: true),
-                    ]),
+                if (_cameraReady)
+                  HtmlElementView(viewType: _viewId)
+                else
+                  Container(
+                    color: _dark2,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                          color: Color(0xFFC9A84C)),
+                    ),
                   ),
-                ),
+
+                // dim overlay
+                Container(color: Colors.black.withOpacity(0.25)),
+
+                // corner guides
+                _corner(top: 80, left: 40, topLeft: true),
+                _corner(top: 80, right: 40, topRight: true),
+                _corner(bottom: 80, left: 40, bottomLeft: true),
+                _corner(bottom: 80, right: 40, bottomRight: true),
+
+                // scanning line
                 if (_isScanning)
-                  const Center(
-                    child: SizedBox(
-                      width: 220,
-                      height: 2,
-                      child: LinearProgressIndicator(
-                        backgroundColor: Colors.transparent,
-                        color: _gold,
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: SizedBox(
+                        width: 220,
+                        height: 2,
+                        child: LinearProgressIndicator(
+                          backgroundColor: Colors.transparent,
+                          color: _gold,
+                        ),
                       ),
                     ),
                   ),
+
                 Positioned(
                   bottom: 12,
                   left: 0,
@@ -349,6 +431,7 @@ class _ScannerPageState extends State<ScannerPage> {
                     ),
                   ),
                 ),
+
                 // Manual scan button
                 Positioned(
                   bottom: 36,
@@ -375,165 +458,40 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
           ),
 
-          // ── Result panel ──────────────────────────────────────────────────
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
+          // ── Status bar (แทน result panel เดิม) ───────────────────────────
+          Container(
             width: double.infinity,
-            constraints: BoxConstraints(
-              minHeight: 80,
-              maxHeight: _hasResult ? 300 : 80,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
             decoration: BoxDecoration(
               color: _dark2,
               border: Border(
                   top: BorderSide(
                       color: _gold.withOpacity(0.3), width: 0.5)),
             ),
-            child: _hasResult
-                ? _buildResults()
-                : Center(
-                    child: Text(
-                      _scanError != null
-                          ? 'เกิดข้อผิดพลาด: $_scanError'
-                          : 'ยังไม่มีผลการสแกน',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _scanError != null
-                            ? Colors.redAccent.withOpacity(0.7)
-                            : Colors.white38,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Result content ────────────────────────────────────────────────────────
-
-  Widget _buildResults() {
-    if (_predictions.isEmpty) {
-      return const Center(
-        child: Text('ไม่พบพระในภาพ',
-            style: TextStyle(color: Colors.white38, fontSize: 13)),
-      );
-    }
-
-    final top = _predictions.first;
-    final rest = _predictions.skip(1).take(3).toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(top.thaiName,
-                        style: const TextStyle(
-                            color: _gold,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold)),
-                    Text(top.className,
-                        style: const TextStyle(
-                            color: _textMuted, fontSize: 12)),
-                  ],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _isScanning
+                      ? Icons.radar
+                      : Icons.document_scanner_outlined,
+                  color: _isScanning ? _gold : Colors.white38,
+                  size: 16,
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color:
-                      _confidenceColor(top.confidence).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: _confidenceColor(top.confidence)
-                          .withOpacity(0.3),
-                      width: 0.5),
-                ),
-                child: Text(
-                  '${(top.confidence * 100).toStringAsFixed(1)}%',
+                const SizedBox(width: 8),
+                Text(
+                  _isScanning
+                      ? 'กำลังสแกน...'
+                      : 'พร้อมสแกน — วางพระให้เห็นชัดเจน',
                   style: TextStyle(
-                      color: _confidenceColor(top.confidence),
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold),
+                    color: _isScanning ? _gold : Colors.white38,
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('ความมั่นใจ',
-                  style: TextStyle(color: _textMuted, fontSize: 11)),
-              Text(
-                top.confidence >= 0.70
-                    ? '✓ น่าเชื่อถือ'
-                    : top.confidence >= 0.45
-                        ? '~ ปานกลาง'
-                        : '✗ ต่ำ',
-                style: TextStyle(
-                    color: _confidenceColor(top.confidence),
-                    fontSize: 11),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: top.confidence,
-              backgroundColor: Colors.white10,
-              valueColor:
-                  AlwaysStoppedAnimation(_confidenceColor(top.confidence)),
-              minHeight: 6,
+              ],
             ),
           ),
-          if (rest.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            const Text('ผลลัพธ์อื่น ๆ',
-                style: TextStyle(color: _textMuted, fontSize: 11)),
-            const SizedBox(height: 6),
-            ...rest.map((p) => _candidateRow(p)),
-          ],
         ],
-      ),
-    );
-  }
-
-  Widget _candidateRow(AmuletPrediction p) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: _dark3,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white10, width: 0.5),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(p.thaiName,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 13)),
-            ),
-            Text(
-              '${(p.confidence * 100).toStringAsFixed(1)}%',
-              style: TextStyle(
-                  color: _confidenceColor(p.confidence), fontSize: 12),
-            ),
-          ],
-        ),
       ),
     );
   }
