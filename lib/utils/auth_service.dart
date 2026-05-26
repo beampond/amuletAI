@@ -61,23 +61,23 @@ class AuthService {
 
     final cred = await _auth.signInWithCredential(credential);
 
-    // สร้าง Firestore doc ถ้าเป็น user ใหม่
-    if (cred.additionalUserInfo?.isNewUser == true) {
-      await _db.collection('users').doc(cred.user!.uid).set({
+    // upsert: สร้างใหม่หรืออัปเดต doc ที่มีอยู่แล้วก็ได้ (merge: true)
+    final userRef = _db.collection('users').doc(cred.user!.uid);
+    final isNew = cred.additionalUserInfo?.isNewUser == true;
+
+    await userRef.set(
+      {
         'uid': cred.user!.uid,
         'email': cred.user!.email ?? '',
         'displayName': cred.user!.displayName ?? '',
         'photoUrl': cred.user!.photoURL ?? '',
-        'role': 'user',
-        'scanCount': 0,
-        'createdAt': FieldValue.serverTimestamp(),
+        if (isNew) 'role': 'user',
+        if (isNew) 'scanCount': 0,
+        if (isNew) 'createdAt': FieldValue.serverTimestamp(),
         'lastLogin': FieldValue.serverTimestamp(),
-      });
-    } else {
-      await _db.collection('users').doc(cred.user!.uid).update({
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
-    }
+      },
+      SetOptions(merge: true), // ไม่ทับ field เดิม เช่น role, scanCount
+    );
 
     return cred;
   }
@@ -106,8 +106,9 @@ class AuthService {
   static Future<void> updateLastLogin() async {
     final uid = currentUser?.uid;
     if (uid == null) return;
-    await _db.collection('users').doc(uid).update({
-      'lastLogin': FieldValue.serverTimestamp(),
-    });
+    await _db.collection('users').doc(uid).set(
+      {'lastLogin': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
+    );
   }
 }
